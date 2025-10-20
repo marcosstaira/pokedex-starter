@@ -1,10 +1,7 @@
-// app/index.js
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import {
-    ActivityIndicator,
-    Alert,
-    Button,
+    ActivityIndicator, Button,
     FlatList,
     Image, Keyboard,
     SafeAreaView,
@@ -44,20 +41,18 @@ export default function HomeScreen() {
     }
   };
 
-  // --- FUNÇÃO DE BUSCA ATUALIZADA ---
-  // Agora, em vez de um Alert, ela define o estado de erro para exibir a nova tela.
   const handleSearch = async () => {
     const query = searchTerm.trim().toLowerCase();
     Keyboard.dismiss();
 
     if (!query) {
-      Alert.alert("Busca vazia", "Por favor, digite um nome de Pokémon para buscar.");
+      handleReturnToList();
       return;
     }
 
     setLoading(true);
     setError(null);
-    setPokemonList([]); // Limpa a lista para focar na UI de carregamento/erro
+    setPokemonList([]); 
 
     try {
       const response = await fetch(`${API_URL}/${query}`);
@@ -66,10 +61,10 @@ export default function HomeScreen() {
         const data = await response.json();
         router.push(`/${data.name}`);
         setSearchTerm('');
-        // Importante: recarrega a lista para quando o usuário voltar da tela de detalhes
+
         loadPokemonPage(offset); 
       } else if (response.status === 404) {
-        // Define a mensagem de erro específica para "Não Encontrado"
+       
         setError(`O Pokémon "${searchTerm}" não foi encontrado.`);
       } else {
         throw new Error('Ocorreu um erro na busca.');
@@ -81,12 +76,10 @@ export default function HomeScreen() {
     }
   };
 
-  // --- NOVA FUNÇÃO ---
-  // Ação para o novo botão "Voltar à Lista"
   const handleReturnToList = () => {
     setError(null);
     setSearchTerm('');
-    loadPokemonPage(0); // Carrega a primeira página da lista
+    loadPokemonPage(0);
   };
 
   useEffect(() => {
@@ -121,17 +114,12 @@ export default function HomeScreen() {
         </View>
       )}
       
-      {/* --- LÓGICA DE ERRO ATUALIZADA --- */}
-      {/* Agora a tela de erro é mais inteligente */}
       {error && !loading && (
         <View style={styles.centered}>
           <Text style={styles.errorText}>{error}</Text>
-          {/* Verifica se o erro foi de "Não Encontrado" */}
           {error.includes("não foi encontrado") ? (
-            // Se sim, mostra o botão "Voltar à Lista"
             <Button title="Voltar à Lista" onPress={handleReturnToList} />
           ) : (
-            // Se for outro tipo de erro (ex: de rede), mostra "Tentar Novamente"
             <Button title="Tentar Novamente" onPress={() => loadPokemonPage(offset)} />
           )}
         </View>
@@ -163,7 +151,6 @@ export default function HomeScreen() {
   );
 }
 
-// Estilos (sem alterações)
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f0f0f0' },
   centered: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 },
