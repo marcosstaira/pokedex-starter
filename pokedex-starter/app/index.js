@@ -1,164 +1,137 @@
-import { useRouter } from 'expo-router';
-import { useEffect, useState } from 'react';
+import React from 'react';
 import {
-    ActivityIndicator, Button,
-    FlatList,
-    Image, Keyboard,
-    SafeAreaView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View
+  View, FlatList, TextInput, ActivityIndicator, Text, Image, StyleSheet, TouchableOpacity, SafeAreaView, ScrollView
 } from 'react-native';
-
-const API_URL = 'https://pokeapi.co/api/v2/pokemon';
+import { useRouter } from 'expo-router';
+import { usePokemonList } from '../source/hooks/usePokemonList';
 
 export default function HomeScreen() {
-  const [pokemonList, setPokemonList] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
-  const [offset, setOffset] = useState(0);
-  const [searchTerm, setSearchTerm] = useState('');
+  const { 
+    data, loading, error, loadMore, 
+    searchQuery, handleSearch, isOffline, retry,
+    types, selectedType, handleTypeSelect // Novos dados do hook
+  } = usePokemonList();
+  
   const router = useRouter();
 
-  const loadPokemonPage = async (pageOffset = 0) => {
-    if (loading) return;
-    setLoading(true);
-    setError(null);
-    try {
-      const response = await fetch(`${API_URL}?limit=20&offset=${pageOffset}`);
-      if (!response.ok) throw new Error('Falha ao carregar a lista de Pokémon.');
-      const data = await response.json();
-      const detailPromises = data.results.map(p => fetch(p.url).then(res => res.json()));
-      const detailedPokemonData = await Promise.all(detailPromises);
-      setPokemonList(detailedPokemonData);
-      setOffset(pageOffset);
-    } catch (e) {
-      setError(e.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleSearch = async () => {
-    const query = searchTerm.trim().toLowerCase();
-    Keyboard.dismiss();
-
-    if (!query) {
-      handleReturnToList();
-      return;
-    }
-
-    setLoading(true);
-    setError(null);
-    setPokemonList([]); 
-
-    try {
-      const response = await fetch(`${API_URL}/${query}`);
-      
-      if (response.ok) {
-        const data = await response.json();
-        router.push(`/${data.name}`);
-        setSearchTerm('');
-
-        loadPokemonPage(offset); 
-      } else if (response.status === 404) {
-       
-        setError(`O Pokémon "${searchTerm}" não foi encontrado.`);
-      } else {
-        throw new Error('Ocorreu um erro na busca.');
-      }
-    } catch (e) {
-      setError(e.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleReturnToList = () => {
-    setError(null);
-    setSearchTerm('');
-    loadPokemonPage(0);
-  };
-
-  useEffect(() => {
-    loadPokemonPage(0);
-  }, []);
-
   const renderItem = ({ item }) => (
-    <TouchableOpacity style={styles.itemContainer} onPress={() => router.push(`/${item.name}`)}>
-      <Image source={{ uri: item.sprites.front_default }} style={styles.itemImage} />
-      <Text style={styles.itemText}>{item.name.charAt(0).toUpperCase() + item.name.slice(1)}</Text>
+    <TouchableOpacity 
+      style={styles.card} 
+      onPress={() => router.push(`/${item.name}`)}
+    >
+      <Image 
+        source={{ uri: item.sprites?.other['official-artwork'].front_default || item.sprites?.front_default }} 
+        style={styles.image} 
+      />
+      <View style={styles.info}>
+        <Text style={styles.name}>{item.name}</Text>
+        <View style={styles.types}>
+          {item.types.map((t) => (
+            <Text key={t.type.name} style={styles.typeBadge}>{t.type.name}</Text>
+          ))}
+        </View>
+      </View>
     </TouchableOpacity>
   );
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.searchContainer}>
-        <TextInput
-          style={styles.searchInput}
-          placeholder="Buscar nome exato..."
-          value={searchTerm}
-          onChangeText={setSearchTerm}
-          onSubmitEditing={handleSearch}
-          returnKeyType="search"
+      {isOffline && (
+        <View style={styles.offlineBanner}>
+          <Text style={styles.offlineText}>Offline Mode</Text>
+        </View>
+      )}
+
+      <View style={styles.header}>
+        <TextInput 
+          style={styles.input}
+          placeholder="Buscar Pokémon..."
+          value={searchQuery}
+          onChangeText={handleSearch}
+          autoCapitalize="none"
         />
-        <Button title="Buscar" onPress={handleSearch} color="#3b4cca" />
+        
+        {/* --- LISTA HORIZONTAL DE TIPOS --- */}
+        <ScrollView 
+            horizontal 
+            showsHorizontalScrollIndicator={false} 
+            style={styles.typeList}
+            contentContainerStyle={{ paddingRight: 20 }}
+        >
+            {types.map((type) => (
+                <TouchableOpacity
+                    key={type.name}
+                    style={[
+                        styles.typeChip,
+                        selectedType === type.name && styles.typeChipSelected // Estilo condicional
+                    ]}
+                    onPress={() => handleTypeSelect(type.name)}
+                >
+                    <Text style={[
+                        styles.typeText,
+                        selectedType === type.name && styles.typeTextSelected
+                    ]}>
+                        {type.name.toUpperCase()}
+                    </Text>
+                </TouchableOpacity>
+            ))}
+        </ScrollView>
       </View>
-      
-      {loading && (
-        <View style={styles.centered}>
-          <ActivityIndicator size="large" color="#e3350d" />
-          <Text>Carregando...</Text>
-        </View>
-      )}
-      
-      {error && !loading && (
-        <View style={styles.centered}>
-          <Text style={styles.errorText}>{error}</Text>
-          {error.includes("não foi encontrado") ? (
-            <Button title="Voltar à Lista" onPress={handleReturnToList} />
-          ) : (
-            <Button title="Tentar Novamente" onPress={() => loadPokemonPage(offset)} />
-          )}
-        </View>
-      )}
 
-      {!loading && !error && (
+      {error && !loading && data.length === 0 ? (
+        <View style={styles.center}>
+            <Text style={styles.errorText}>{error}</Text>
+            <TouchableOpacity onPress={retry} style={styles.retryBtn}>
+                <Text style={{color: '#fff'}}>Tentar Novamente</Text>
+            </TouchableOpacity>
+        </View>
+      ) : (
         <FlatList
-          data={pokemonList}
-          renderItem={renderItem}
+          data={data}
           keyExtractor={(item) => item.id.toString()}
-          contentContainerStyle={{ paddingBottom: 100 }}
+          renderItem={renderItem}
+          onEndReached={loadMore}
+          onEndReachedThreshold={0.5}
+          ListFooterComponent={loading ? <ActivityIndicator size="large" color="#e3350d" /> : <View style={{height: 50}}/>}
+          contentContainerStyle={{ padding: 10 }}
         />
-      )}
-
-      {!loading && !error && pokemonList.length > 0 && (
-        <View style={styles.paginationContainer}>
-          <Button
-            title="Anterior"
-            onPress={() => loadPokemonPage(Math.max(0, offset - 20))}
-            disabled={offset === 0}
-          />
-          <Button
-            title="Próxima"
-            onPress={() => loadPokemonPage(offset + 20)}
-          />
-        </View>
       )}
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f0f0f0' },
-  centered: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 },
-  searchContainer: { flexDirection: 'row', padding: 10, backgroundColor: '#fff', alignItems: 'center' },
-  searchInput: { flex: 1, borderWidth: 1, borderColor: '#ccc', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 8, marginRight: 10 },
-  itemContainer: { flexDirection: 'row', alignItems: 'center', padding: 15, borderBottomWidth: 1, borderBottomColor: '#ddd', backgroundColor: '#fff' },
-  itemImage: { width: 50, height: 50, marginRight: 15 },
-  itemText: { fontSize: 18, textTransform: 'capitalize' },
-  paginationContainer: { flexDirection: 'row', justifyContent: 'space-around', paddingVertical: 10, position: 'absolute', bottom: 0, width: '100%', backgroundColor: '#f0f0f0', borderTopWidth: 1, borderTopColor: '#ccc' },
-  errorText: { marginBottom: 15, color: 'red', fontSize: 16, textAlign: 'center' },
+  container: { flex: 1, backgroundColor: '#f5f5f5' },
+  offlineBanner: { backgroundColor: '#333', padding: 5, alignItems: 'center' },
+  offlineText: { color: '#fff', fontSize: 12 },
+  header: { padding: 10, backgroundColor: '#fff', elevation: 2 },
+  input: { backgroundColor: '#f0f0f0', borderRadius: 8, padding: 10, marginBottom: 10 },
+  
+  // Estilos do Filtro
+  typeList: { flexDirection: 'row', marginBottom: 5 },
+  typeChip: { 
+    paddingHorizontal: 15, 
+    paddingVertical: 8, 
+    borderRadius: 20, 
+    backgroundColor: '#eee', 
+    marginRight: 8,
+    borderWidth: 1,
+    borderColor: 'transparent'
+  },
+  typeChipSelected: { 
+    backgroundColor: '#e3350d',
+    borderColor: '#e3350d'
+  },
+  typeText: { fontSize: 12, fontWeight: 'bold', color: '#666' },
+  typeTextSelected: { color: '#fff' },
+
+  card: { flexDirection: 'row', backgroundColor: '#fff', marginBottom: 10, borderRadius: 10, padding: 10, elevation: 3 },
+  image: { width: 80, height: 80 },
+  info: { marginLeft: 10, justifyContent: 'center' },
+  name: { fontSize: 18, fontWeight: 'bold', textTransform: 'capitalize' },
+  types: { flexDirection: 'row', marginTop: 5 },
+  typeBadge: { backgroundColor: '#eee', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10, marginRight: 5, fontSize: 12 },
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  errorText: { color: 'red', marginBottom: 10 },
+  retryBtn: { backgroundColor: '#e3350d', padding: 10, borderRadius: 5 }
 });
